@@ -1,0 +1,105 @@
+<?php
+
+namespace App\Http\Controllers\Api\V1\Admin\System;
+
+use App\Http\Controllers\Api\V1\Admin\AdminController;
+use App\Models\User;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\Log;
+
+/**
+ * Системные операции: очистка кэша, очистка кэша поиска.
+ *
+ * Переехал из Admin/SystemController.php (был на корневом уровне Admin/)
+ * в Admin/System/SystemController.php — теперь соответствует PSR-4.
+ *
+ * Только для admin-роли или founders. Middleware admin.role:admin
+ * уже стоит на роутах, но здесь делаем двойную проверку (defense in depth).
+ */
+class SystemController extends AdminController
+{
+    /**
+     * POST /api/admin/system/clear-cache
+     * Очистка серверного кэша (Redis) — только для админов.
+     */
+    public function clearCache(Request $request): JsonResponse
+    {
+        /** @var User $user */
+        $user = $request->user();
+
+        // Двойная проверка (middleware уже проверил, но подстрахуемся).
+        if ($user->role !== 'admin' && !in_array($user->id, config('app.founders', []))) {
+            return $this->message('Доступ запрещён.', 403);
+        }
+
+        try {
+            // 1. Очищаем конкретные ключи админки (точечно).
+            Cache::forget('admin_dashboard_live_v2');
+            Cache::forget('admin_dashboard_metrics_v8');
+            Cache::forget('admin_dashboard_activity_v1');
+            Cache::forget('admin_sidebar_stats');
+
+            // 2. Полная очистка всего Redis-кэша через Artisan.
+            Artisan::call('cache:clear');
+
+            Log::info('Кэш Redis очищен администратором', [
+                'admin_id'   => $user->id,
+                'admin_name' => $user->name,
+            ]);
+
+            return $this->message('Кэш Redis успешно очищен!');
+        } catch (\Exception $e) {
+            // Пакет 5 (рекомендация №3): раньше текст внутреннего исключения
+            // (адрес Redis, детали соединения) улетал админу в ответ.
+            // Теперь: детали — в лог, наружу — фиксированный текст.
+            Log::error('Ошибка очистки кэша', [
+                'error'   => $e->getMessage(),
+                'admin_id' => $user->id,
+            ]);
+
+            return $this->message('Ошибка при очистке кэша. Подробности — в логах приложения.', 500);
+        }
+    }
+
+    /**
+     * POST /api/admin/system/clear-search-cache
+     * Очистка кэша поиска анкет (Redis).
+     */
+    public function clearSearchCache(Request $request): JsonResponse
+    {
+        /** @var User $user */
+        $user = $request->user();
+
+        if ($user->role !== 'admin' && !in_array($user->id, config('app.founders', []))) {
+            return $this->message('Доступ запрещён.', 403);
+        }
+
+        try {
+            $deleted = 0;
+
+            // Ищем все ключи feed_search:* и удаляем через SCAN.
+            $redis = Cache::getRedis();
+            $iterator = null;
+
+            while ($keys = $redis->scan($iterator, 'feed_search:*', 100)) {
+                if (!empty($keys)) {
+                    $redis->del($keys);
+                    $deleted += count($keys);
+                }
+                if ($iterator === 0) break;
+            }
+
+            Log::info('Кэш поиска очищен администратором', [
+                'admin_id'    => $user->id,
+                'keys_deleted' => $deleted,
+            ]);
+
+            return $this->message("Кэш поиска очищен! Удалено ключей: {$deleted}");
+        } catch (\Exception $e) {
+            return $this->message('Ошибка: ' . $e->getMessage(), 500);
+        }
+    }
+}

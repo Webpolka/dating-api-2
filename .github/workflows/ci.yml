@@ -1,0 +1,79 @@
+# CI: линт + Pint + PHPUnit (Postgres 16 + PostGIS 3.4).
+#
+# Запускается на каждый push и pull_request. Окружение 1:1 с прода
+# (compose.yaml: postgis/postgis:16-3.4-alpine) — миграция 0001 создаёт
+# расширение postgis от суперпользователя postgres.
+#
+# Pint — НЕ блокирующий шаг: кодовая база форматировалась вручную на
+# протяжении Шагов 1-2 (структурный php -l-эквивалент), полный прогон
+# `vendor/bin/pint` даст стайл-дифф по всему репо. Включить блокировку
+# (`continue-on-error: false`) стоит после единоразового прогона
+# `vendor/bin/pint` отдельным коммитом "style: apply pint".
+#
+# Тесты не требуют Redis: phpunit.xml ставит array-драйверы и
+# SESSION_REGISTRY_ENABLED=false (герметичность feature-тестов).
+
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    name: PHPUnit (PHP ${{ matrix.php }}, Postgres 16 + PostGIS)
+
+    strategy:
+      fail-fast: false
+      matrix:
+        php: ['8.3', '8.4']
+
+    services:
+      postgres:
+        image: postgis/postgis:16-3.4-alpine
+        env:
+          POSTGRES_DB: testing
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: mbstring, xml, ctype, iconv, intl, pdo_pgsql, pgsql, gd, zip, bcmath
+          coverage: none
+
+      - name: Install Composer dependencies
+        run: composer install --no-interaction --prefer-dist --no-progress
+
+      - name: Lint (php -l, все app/tests/routes/config/database)
+        run: find app tests routes config database bootstrap -name '*.php' -print0 | xargs -0 -n1 -P4 php -l
+
+      - name: Pint (code style, не блокирующий)
+        continue-on-error: true
+        run: vendor/bin/pint --test
+
+      - name: Run tests
+        env:
+          # .env НЕ создаём: конфиг берётся из окружения + phpunit.xml.
+          # APP_KEY — тестовый (не секрет), нужен шифрованию сессий/куки.
+          APP_KEY: base64:st8GaWdUeKWYkxfv5QvxtC7zOENZEwhx0nPhhM/gI7g=
+          DB_HOST: 127.0.0.1
+          DB_PORT: 5432
+          DB_DATABASE: testing
+          DB_USERNAME: postgres
+          DB_PASSWORD: postgres
+        run: php artisan test
