@@ -511,5 +511,79 @@ class RateLimitServiceProvider extends ServiceProvider
                     ], 429);
                 });
         });
+
+
+
+        // ------------------------------------------------------------
+        // WEB API VERIFICATION: throttle для requestCode / submit
+        // ------------------------------------------------------------
+        // Лимит: 5 действий в минуту на user_id.
+        //
+        // Защита от:
+        //  - спама генерацией кода (каждый код пишет в Redis, TTL 10 мин,
+        //    при спаме Redis заполняется, хотя и чистится по TTL);
+        //  - намеренного/случайного дабл-клика по submit (UNIQUE partial
+        //    index защищит от дублей в БД, но каждый запрос создаёт
+        //    транзакцию и SELECT findActiveForUser);
+        //  - ботов, крутящих коды в попытке перебрать значения (хотя
+        //    6-символьный алфавит 32^6 ≈ 10^9 + TTL 10 мин делает это
+        //    бессмысленным).
+        //
+        // 5 в минуту = 12 секунд между запросами — достаточно для
+        // нормального юзерского flow (код → загрузка фото → submit),
+        // но отсекает спам.
+        RateLimiter::for('api-verification', function (Request $request) {
+            $userId = $request->user()?->id ?? 'guest';
+            return Limit::perMinute(5)
+                ->by("verify:{$userId}")
+                ->response(function () {
+                    return response()->json([
+                        'message' => 'Слишком много запросов верификации. Подождите минуту.',
+                    ], 429);
+                });
+        });
+
+
+
+        // ------------------------------------------------------------
+        // WEB API PROMO CODE: throttle для validate-promo / redeem
+        // ------------------------------------------------------------
+        // Лимит: 10 действий в минуту на user_id.
+        //
+        // Защита от:
+        //  - спама перебором кодов (хотя 32^10 ≈ 10^15 комбинаций, но всё же).
+        //  - намеренного дабл-клика по redeem (PromoCode::apply идемпотентен
+        //    через UNIQUE(promo_code_id, user_id), но каждый запрос создаёт
+        //    SELECT + transaction — лишняя нагрузка).
+        //
+        // 10 в минуту = 6 секунд между запросами — достаточно для нормального
+        // flow (validate → pay) или единичных redeem.
+        RateLimiter::for('api-promo-code', function (Request $request) {
+            $userId = $request->user()?->id ?? 'guest';
+            return Limit::perMinute(10)
+                ->by("promo:{$userId}")
+                ->response(function () {
+                    return response()->json([
+                        'message' => 'Слишком много запросов промокодов. Подождите минуту.',
+                    ], 429);
+                });
+        });
+
+        // ------------------------------------------------------------
+        // ADMIN PROMO CODE ACTIONS: throttle для store/update/destroy/toggle/bulk-generate
+        // ------------------------------------------------------------
+        // Лимит: 30 действий в минуту — стандарт для admin mutations.
+        // bulk-generate может создать до 1000 кодов за один запрос, но это
+        // один HTTP-запрос → throttle по admin_id (как в других admin actions).
+        RateLimiter::for('admin-promo-code-actions', function (Request $request) {
+            $adminId = $request->user()?->id ?? 'guest';
+            return Limit::perMinute(30)
+                ->by("admin:{$adminId}")
+                ->response(function () {
+                    return response()->json([
+                        'message' => 'Слишком много действий с промокодами. Подождите минуту.',
+                    ], 429);
+                });
+        });
     }
 }

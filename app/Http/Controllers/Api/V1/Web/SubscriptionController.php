@@ -4,9 +4,11 @@ namespace App\Http\Controllers\Api\V1\Web;
 
 use App\Http\Controllers\Controller;
 use App\Jobs\V1\Admin\Finance\ProcessSubscriptionPaymentGateway;
+use App\Models\PromoCode;
 use App\Models\SubscriptionPlan;
 use App\Models\Transaction;
 use App\Models\UserSubscription;
+use App\Enums\V1\PromoCodeType;
 use App\Http\Requests\Api\V1\Web\PaySubscriptionRequest;
 use App\Http\Requests\Api\V1\Web\SubscriptionPlansRequest;
 use Illuminate\Http\JsonResponse;
@@ -113,6 +115,68 @@ class SubscriptionController extends Controller
     }
 
     /**
+     * Валидация промокода для применения при оплате (percent/fixed).
+     *
+     * Возвращает массив с promo-данными для meta или JsonResponse с ошибкой.
+     * Defence in depth: повторная проверка после /api/subscriptions/validate-promo.
+     *
+     * @return array{promo_code_id: int, promo_code_discount: float, final_amount: float}|JsonResponse
+     */
+    private function resolvePromoCodeForPayment($user, SubscriptionPlan $plan, ?string $code): array|JsonResponse
+    {
+        if (!$code) {
+            // Промокода нет — стандартная оплата.
+            return [
+                'promo_code_id'      => 0,
+                'promo_code_discount' => 0.0,
+                'final_amount'       => (float) $plan->price,
+            ];
+        }
+
+        $promo = PromoCode::findByCode($code);
+        if (!$promo) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Промокод не найден.',
+            ], 422);
+        }
+
+        if (!$promo->isValidForUser($user)) {
+            $reason = match (true) {
+                !$promo->is_active    => 'деактивирован',
+                $promo->isExpired()   => 'срок действия истёк',
+                $promo->isFullyUsed() => 'лимит использований исчерпан',
+                $promo->isPersonal() && $promo->user_id !== $user->id => 'не предназначен вашему аккаунту',
+                default               => 'уже использован',
+            };
+            return response()->json([
+                'success' => false,
+                'message' => "Промокод недействителен: {$reason}.",
+            ], 422);
+        }
+
+        $type = PromoCodeType::tryFrom($promo->discount_type);
+        if (!$type || $type->givesFreeDays()) {
+            // premium/vip — это не скидка на оплату, а бесплатные дни.
+            // Юзер должен использовать /api/promo-codes/redeem.
+            return response()->json([
+                'success' => false,
+                'message' => 'Этот промокод даёт бесплатные дни подписки. Активируйте его через раздел «Мои промокоды» в настройках профиля.',
+            ], 422);
+        }
+
+        $originalAmount = (float) $plan->price;
+        $discount = $promo->calculateDiscount($originalAmount);
+        $finalAmount = max(0, $originalAmount - $discount);
+
+        return [
+            'promo_code_id'      => $promo->id,
+            'promo_code_discount' => $discount,
+            'final_amount'       => $finalAmount,
+        ];
+    }
+
+    /**
      * Единый формат ответа «платёж принят» (redirect на SPA success page).
      */
     private function paymentResponse(Transaction $transaction, bool $replay = false): array
@@ -182,6 +246,19 @@ class SubscriptionController extends Controller
             return $replay;
         }
 
+        // Промокод: если передан — валидируем и пересчитываем amount.
+        // Возвращает либо [promo_code_id, promo_code_discount, final_amount],
+        // либо JsonResponse с 422 — в последнем случае сразу возвращаем.
+        $promoResolution = $this->resolvePromoCodeForPayment(
+            $user,
+            $plan,
+            $validated['promo_code'] ?? null,
+        );
+
+        if ($promoResolution instanceof JsonResponse) {
+            return $promoResolution;
+        }
+
         try {
             $meta = array_merge([
                 'plan_id' => $plan->id,
@@ -198,9 +275,18 @@ class SubscriptionController extends Controller
                 $meta['idempotency_key'] = $idempotencyKey;
             }
 
+            // Промокод в meta — для job'а (после успеха вызвать PromoCode::apply)
+            // и для фин. отчётов (applied discount).
+            if ($promoResolution['promo_code_id'] > 0) {
+                $meta['promo_code_id'] = $promoResolution['promo_code_id'];
+                $meta['promo_code_discount'] = $promoResolution['promo_code_discount'];
+            }
+
             $transaction = Transaction::create([
                 'user_id' => $user->id,
                 'amount' => $plan->price,
+                // Итоговая сумма после скидки (если промокода нет — это plan->price).
+                'amount' => $promoResolution['final_amount'],
                 'currency' => $plan->currency,
                 'type' => Transaction::TYPE_SUBSCRIPTION,
                 'status' => Transaction::STATUS_PENDING,

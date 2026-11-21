@@ -104,7 +104,7 @@ class AdminLogResource extends JsonResource
             \App\Models\Media::class               => ['/system/media', 'q'],
             \App\Models\GeoIPLocation::class       => ['/system/geo', 'q'],
             \App\Models\Setting::class             => ['/system/settings', null],
-            \App\Models\Broadcast::class           => ['/system/broadcasts', 'q'],
+            \App\Models\Broadcast::class           => ['/system/broadcasts', 'q'],            
             \App\Models\StopWord::class            => ['/communication/stop-words', 'q'],
             \App\Models\SupportTemplate::class    => ['/communication/support-templates', 'q'],
             \App\Models\Gift::class                => ['/finance/gifts', 'q', ['tab' => 'catalog']],
@@ -112,6 +112,7 @@ class AdminLogResource extends JsonResource
             \App\Models\Transaction::class         => ['/finance/transactions', 'q'],
             \App\Models\SubscriptionPlan::class    => ['/finance/subscription-plans', 'q'],
             \App\Models\Photo::class               => ['/moderation/photos', 'q'],
+            \App\Models\Verification::class        => ['/moderation/verifications', 'q'],            
         ];
 
         if (! isset($routeMap[$modelClass])) {

@@ -1,27 +1,35 @@
 <?php
 
 use App\Http\Controllers\Api\V1\Admin\Auth\AuthController;
+
 use App\Http\Controllers\Api\V1\Admin\Communication\ChatController;
 use App\Http\Controllers\Api\V1\Admin\Communication\StopWordController;
 use App\Http\Controllers\Api\V1\Admin\Communication\SupportChatController;
 use App\Http\Controllers\Api\V1\Admin\Communication\SupportTemplateController;
+
 use App\Http\Controllers\Api\V1\Admin\Finance\GiftController;
 use App\Http\Controllers\Api\V1\Admin\Finance\SubscriptionPlanController;
 use App\Http\Controllers\Api\V1\Admin\Finance\TransactionController;
+use App\Http\Controllers\Api\V1\Admin\Finance\PromoCodeController;
+
 use App\Http\Controllers\Api\V1\Admin\Main\DashboardController;
 use App\Http\Controllers\Api\V1\Admin\Main\UserActivityListingsController;
 use App\Http\Controllers\Api\V1\Admin\Main\UserAuditListingsController;
 use App\Http\Controllers\Api\V1\Admin\Main\UserContentListingsController;
 use App\Http\Controllers\Api\V1\Admin\Main\UserController;
 use App\Http\Controllers\Api\V1\Admin\Main\UserFinanceListingsController;
+
 use App\Http\Controllers\Api\V1\Admin\Moderation\DatingController;
 use App\Http\Controllers\Api\V1\Admin\Moderation\DiaryCommentController;
 use App\Http\Controllers\Api\V1\Admin\Moderation\DiaryController;
 use App\Http\Controllers\Api\V1\Admin\Moderation\PhotoCommentController;
 use App\Http\Controllers\Api\V1\Admin\Moderation\PhotoController;
 use App\Http\Controllers\Api\V1\Admin\Moderation\ReportController;
+use App\Http\Controllers\Api\V1\Admin\Moderation\VerificationController;
+
 use App\Http\Controllers\Api\V1\Admin\Security\BlockSignalController;
 use App\Http\Controllers\Api\V1\Admin\Security\FraudAlertController;
+
 use App\Http\Controllers\Api\V1\Admin\System\AdminLogController;
 use App\Http\Controllers\Api\V1\Admin\System\BlogCategoryController;
 use App\Http\Controllers\Api\V1\Admin\System\BlogPostController;
@@ -35,6 +43,8 @@ use App\Http\Controllers\Api\V1\Admin\System\PageController;
 use App\Http\Controllers\Api\V1\Admin\System\SettingController;
 use App\Http\Controllers\Api\V1\Admin\System\StaffController;
 use App\Http\Controllers\Api\V1\Admin\System\SystemController;
+
+
 use Illuminate\Support\Facades\Route;
 
 /**
@@ -244,6 +254,19 @@ Route::middleware(['web'])->group(function () {
             ->middleware('throttle:admin-photo-comment-actions');
         Route::delete('/photo-comments/{id}', [PhotoCommentController::class, 'destroy'])
             ->middleware('throttle:admin-photo-comment-actions');
+
+        // === VERIFICATION MODERATION (Заявки на верификацию юзеров) ===
+        // Список / счётчики / детальный просмотр — read-only, без throttle.
+        // ВАЖНО: /counts ДО /{id}/... — иначе Laravel спутает 'counts' с {id}.
+        Route::get('/verifications', [VerificationController::class, 'index']);
+        Route::get('/verifications/counts', [VerificationController::class, 'counts']);
+        Route::get('/verifications/{id}', [VerificationController::class, 'show']);
+        // Мутации — moderation actions (approve/reject).
+        Route::post('/verifications/{id}/approve', [VerificationController::class, 'approve'])
+            ->middleware('throttle:admin-photo-comment-actions');
+        Route::post('/verifications/{id}/reject', [VerificationController::class, 'reject'])
+            ->middleware('throttle:admin-photo-comment-actions');
+
 
         // === DATING MODERATION (Свайпы и Матчи) ===
         Route::get('/dating', [DatingController::class, 'index']);
@@ -518,6 +541,26 @@ Route::middleware(['web'])->group(function () {
         Route::post('/subscription-plans', [SubscriptionPlanController::class, 'store']);
         Route::put('/subscription-plans/{id}', [SubscriptionPlanController::class, 'update']);
         Route::post('/subscription-plans/{id}/toggle', [SubscriptionPlanController::class, 'toggleActive']);
+
+
+        // === PROMO CODES (Маркетинг/Монетизация) ===
+        // CRUD + bulk generation + детальный просмотр с историей использований.
+        // ВАЖНО: /counts ДО /{id} — иначе Laravel спутает 'counts' с {id}.
+        //         /bulk-generate — статический, тоже ВЫШЕ /{id}.
+        Route::get('/promo-codes', [PromoCodeController::class, 'index']);
+        Route::get('/promo-codes/counts', [PromoCodeController::class, 'counts']);
+        Route::post('/promo-codes/bulk-generate', [PromoCodeController::class, 'bulkGenerate'])
+            ->middleware('throttle:admin-promo-code-actions');
+        Route::post('/promo-codes', [PromoCodeController::class, 'store'])
+            ->middleware('throttle:admin-promo-code-actions');
+        Route::get('/promo-codes/{id}', [PromoCodeController::class, 'show']);
+        Route::put('/promo-codes/{id}', [PromoCodeController::class, 'update'])
+            ->middleware('throttle:admin-promo-code-actions');
+        Route::delete('/promo-codes/{id}', [PromoCodeController::class, 'destroy'])
+            ->middleware('throttle:admin-promo-code-actions');
+        Route::post('/promo-codes/{id}/toggle', [PromoCodeController::class, 'toggleStatus'])
+            ->middleware('throttle:admin-promo-code-actions');
+
 
         // === GIFTS (Каталог) ===
         Route::get('/gifts', [GiftController::class, 'index']);

@@ -67,11 +67,12 @@ class ModeratePhotoAction
         // Job диспатчим ПОСЛЕ commit — фото уже в approved.
         // Cache Lock внутри ProcessApprovedPhoto предотвращает duplicate processing.
         ProcessApprovedPhoto::dispatch($photo->id);
-
-        // Если одобрили аватар — юзер верифицируется
-        if ($photo->is_primary && $photo->user) {
-            $photo->user->update(['is_verified' => true]);
-        }
+       
+        // NOTE: Approve аватара БОЛЬШЕ НЕ верифицирует юзера автоматически.
+        // Верификация — отдельный flow через Verification::markAsApproved()
+        // (см. App\Actions\V1\Admin\Moderation\ModerateVerificationAction).
+        // Прежний хардкод 'is_verified=true при approve primary photo' убран:
+        // он создавал второй неявный путь верификации и путал семантику is_verified.
 
         // Дедуп уведомлений (не спамим, если за 5 мин уже было одобрение)
         if ($notify && $photo->user) {
@@ -399,11 +400,9 @@ class ModeratePhotoAction
                 'reject_reason' => null,
             ]);
 
-            // Если среди одобренных есть primary — юзер верифицируется
-            $hasPrimary = Photo::whereIn('id', $ids)->where('is_primary', true)->exists();
-            if ($hasPrimary) {
-                $user->update(['is_verified' => true]);
-            }
+         
+            // NOTE: bulk approve primary фото больше НЕ верифицирует юзера.
+            // Верификация — только через Verification flow.
 
             return $ids;
         });

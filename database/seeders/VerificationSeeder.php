@@ -2,6 +2,7 @@
 
 namespace Database\Seeders;
 
+use App\Enums\V1\VerificationRejectReason;
 use App\Models\Verification;
 use App\Models\Photo;
 use App\Models\User;
@@ -42,6 +43,7 @@ class VerificationSeeder extends Seeder
             Verification::create([
                 'user_id' => $user->id,
                 'photo_id' => $photo?->id,
+                'code' => Verification::generateCode(),
                 'status' => Verification::STATUS_APPROVED,
                 'moderated_by' => $admin->id,
                 'moderated_at' => now()->subDays(rand(10, 30)),
@@ -60,15 +62,18 @@ class VerificationSeeder extends Seeder
         $rejectedCount = min(3, $unverifiedUsers->count());
 
         if ($rejectedCount > 0) {
-            // ФИКС: Используем английские слаги, которые разрешены в Enum миграции
-             $rejectReasons = [Verification::REASON_BLURRY, Verification::REASON_FAKE, Verification::REASON_NO_CODE];
-            
+            // Причины — значения из enum VerificationRejectReason.
+            // Берём только "пользовательские" через userValues() — это симметрично
+            // с RejectVerificationRequest (Rule::in(VerificationRejectReason::userValues())).
+            $rejectReasons = VerificationRejectReason::userValues();
+
             foreach ($unverifiedUsers->random($rejectedCount) as $user) {
                 $photo = $user->photos()->inRandomOrder()->first();
 
                 Verification::create([
                     'user_id' => $user->id,
                     'photo_id' => $photo?->id,
+                    'code' => Verification::generateCode(),
                     'status' => Verification::STATUS_REJECTED,
                     'reject_reason' => $rejectReasons[array_rand($rejectReasons)],
                     'moderated_by' => $admin->id,
@@ -94,6 +99,7 @@ class VerificationSeeder extends Seeder
                 Verification::create([
                     'user_id' => $user->id,
                     'photo_id' => $photo?->id,
+                    'code' => Verification::generateCode(),
                     'status' => Verification::STATUS_PENDING,
                     'created_at' => now()->subHours(rand(1, 12)),
                 ]);

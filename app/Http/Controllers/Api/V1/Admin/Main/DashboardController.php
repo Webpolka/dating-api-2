@@ -16,6 +16,7 @@ use App\Models\Diary;
 use App\Models\Swipe;
 use App\Models\UserMatch;
 use App\Models\Message;
+use App\Models\Verification;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
@@ -40,6 +41,7 @@ class DashboardController extends AdminController
                 'pendingDiaries' => Diary::where('status', 'pending')->count(),
                 'pendingDiaryComments' => DiaryComment::where('status', 'pending')->count(),
                 'pendingReports' => Report::where('status', 'pending')->count(),
+                'pendingVerifications' => Verification::where('status', 'pending')->count(),
 
                 'unreadTickets' => Chat::where('type', 'support')
                     ->whereHas('participants', fn($q) => $q->where('unread_count', '>', 0))

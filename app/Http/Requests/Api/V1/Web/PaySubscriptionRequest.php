@@ -19,6 +19,17 @@ class PaySubscriptionRequest extends WebJsonRequest
             'payment_method' => 'required|in:card,yoomoney',
             'auto_renew' => 'boolean',
             'return_url' => 'nullable|string',
+            // Промокод — nullable. Валидируется отдельно в SubscriptionController::pay()
+            // (через PromoCode::isValidForUser). Здесь только формат.
+            // В upper-case приводится в prepareForValidation.
+            'promo_code' => 'nullable|string|max:50',
         ];
+    }
+
+    protected function prepareForValidation(): void
+    {
+        if ($this->has('promo_code') && is_string($this->input('promo_code'))) {
+            $this->merge(['promo_code' => strtoupper(trim($this->input('promo_code')))]);
+        }
     }
 }

@@ -10,6 +10,7 @@ use App\Http\Controllers\Api\V1\Web\SwipeController;
 use App\Http\Controllers\Api\V1\Web\SubscriptionController;
 use App\Http\Controllers\Api\V1\Web\EditProfileController;
 use App\Http\Controllers\Api\V1\Web\InterestController;
+use App\Http\Controllers\Api\V1\Web\VerificationController;
 
 
 use Illuminate\Support\Facades\Route;
@@ -95,13 +96,36 @@ Route::middleware(['web', 'auth:sanctum'])->group(function () {
     Route::patch('/profile/personal-info', [EditProfileController::class, 'updatePersonalInfo']);
     Route::patch('/profile/looking-for', [EditProfileController::class, 'updateLookingFor']);
     Route::patch('/profile/preferences', [EditProfileController::class, 'updatePreferences']);    
+
+
+    // Верификация пользователя (фото с кодом-жестом).
+    // Флоу: status → code (генерация одноразового кода) → юзер грузит
+    // verification-фото → submit (создаёт pending Verification).
+    Route::get('/verification/status', [VerificationController::class, 'status'])
+        ->name('api.verification.status');
+    Route::post('/verification/code', [VerificationController::class, 'requestCode'])
+        ->middleware('throttle:api-verification')
+        ->name('api.verification.code');
+    Route::post('/verification/submit', [VerificationController::class, 'submit'])
+        ->middleware('throttle:api-verification')
+        ->name('api.verification.submit');
     
 
-    // Подписки
-    Route::get('/subscriptions/plans', [SubscriptionController::class, 'plans']);   
+    // Подписки    
+    Route::get('/subscriptions/plans', [SubscriptionController::class, 'plans']);
+    // Валидация промокода ДО оплаты (юзер вводит код → бек возвращает скидку).
+    Route::post('/subscriptions/validate-promo', [\App\Http\Controllers\Api\V1\Web\PromoCodeController::class, 'validate'])
+        ->middleware('throttle:api-promo-code')
+        ->name('api.subscriptions.validate-promo');
     Route::post('/subscriptions/pay', [SubscriptionController::class, 'pay']);
     Route::get('/subscriptions/status/{transaction}', [SubscriptionController::class, 'status']);
     Route::post('/subscriptions/renew', [SubscriptionController::class, 'renew']);
+
+    // Промокоды (redeem бесплатных дней — premium/vip, без оплаты).
+    Route::post('/promo-codes/redeem', [\App\Http\Controllers\Api\V1\Web\PromoCodeController::class, 'redeem'])
+        ->middleware('throttle:api-promo-code')
+        ->name('api.promo-codes.redeem');
+
 
     // Подарки  
     Route::get('/gifts', [\App\Http\Controllers\Api\V1\Web\GiftController::class, 'index'])->name('api.gifts.index');    

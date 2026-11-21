@@ -3,6 +3,7 @@
 namespace App\Jobs\V1\Admin\Finance;
 
 use App\Actions\V1\Admin\Finance\GrantSubscriptionAction;
+use App\Models\PromoCode;
 use App\Models\SubscriptionPlan;
 use App\Models\Transaction;
 use App\Services\V1\MockAcquiringService;
@@ -86,6 +87,37 @@ class ProcessSubscriptionPaymentGateway implements ShouldQueue
             // нет → создаём. Перепроверка внутри транзакции с блокировкой
             // закрывает гонки независимо от проверок в контроллере.
             app(GrantSubscriptionAction::class)->execute($user, $plan, $transaction);
+
+            // Промокод: если был применён в оплате (meta.promo_code_id),
+            // вызываем PromoCode::apply() — increment used_count + создаём
+            // PromoCodeUsage со снапшотом скидки.
+            // Идемпотентность: guard по статусу pending выше предотвращает
+            // повторный вызов apply при retry job'а. UNIQUE(promo_code_id, user_id)
+            // в promo_code_usages — вторая защита от дублей.
+            $promoCodeId = $transaction->meta['promo_code_id'] ?? null;
+            if ($promoCodeId) {
+                $promo = PromoCode::find($promoCodeId);
+                if ($promo) {
+                    $usage = $promo->apply($user, $transaction);
+                    if (!$usage) {
+                        // Код стал невалидным между оплатой и job'ом (истёк/
+                        // исчерпан/уже использован в параллельном запросе).
+                        // Подписка уже выдана — деньги получены честно,
+                        // но скидка не списана в PromoCodeUsage. Логируем
+                        // для ручного разбора (финансы).
+                        Log::warning("SubscriptionGateway: промокод #{$promo->id} ({$promo->code}) не применён к транзакции #{$transaction->id} — стал невалидным. Скидка: {$transaction->meta['promo_code_discount']} ₽.", [
+                            'promo_code_id'  => $promo->id,
+                            'transaction_id' => $transaction->id,
+                            'user_id'        => $user->id,
+                        ]);
+                    }
+                } else {
+                    Log::warning("SubscriptionGateway: промокод #{$promoCodeId} из meta транзакции #{$transaction->id} не найден — удалён?", [
+                        'promo_code_id'  => $promoCodeId,
+                        'transaction_id' => $transaction->id,
+                    ]);
+                }
+            }
         });
     }
 
