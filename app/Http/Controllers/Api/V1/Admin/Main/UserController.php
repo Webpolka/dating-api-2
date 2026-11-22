@@ -153,7 +153,10 @@ class UserController extends AdminController
                 ->where(fn($s) => $s->whereNull('vip_expires_at')->orWhere('vip_expires_at', '<=', now()))
                 ->where(fn($s) => $s->whereNull('premium_expires_at')->orWhere('premium_expires_at', '<=', now())))
             ->when(ctype_digit($search), fn($q) => $q->orderByRaw('CASE WHEN id = ? THEN 0 ELSE 1 END', [(int) $search]))
-            ->orderBy('created_at', $sort)
+            // Сортировка по updated_at — после бана/разбана/деактивации/восстановления
+            // Eloquent автоматически обновляет updated_at → юзер оказывается сверху.
+            // Это правильно для модерации: админ видит свежие изменения первыми.
+            ->orderBy('updated_at', $sort)
             ->orderBy('id', $sort)
             ->paginate($perPage)
             ->withQueryString();
@@ -171,6 +174,7 @@ class UserController extends AdminController
             'has_active_vip'     => $user->has_active_vip,
             'is_verified'        => $user->is_verified,
             'created_at'         => $user->created_at?->toIso8601String(),
+            'updated_at'         => $user->updated_at?->toIso8601String(),
             'banned_until'       => $user->banned_until?->toIso8601String(),
             'ban_reason'         => $user->ban_reason,
             'gender'             => $user->profile?->gender,

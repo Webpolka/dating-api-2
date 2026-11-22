@@ -85,25 +85,41 @@ class UserDetailResource extends JsonResource
                 'country' => $profile->country?->name,
                 'state'   => $profile->city?->state?->name,
                 'city'    => $profile->city?->name,
+                'address' => $profile->address,
             ] : null,
 
             // === Preferences ===
             'preferences' => $prefs ? [
-                'preferred_gender'       => $prefs->preferred_gender,
-                'preferred_age_min'      => $prefs->preferred_age_min,
-                'preferred_age_max'      => $prefs->preferred_age_max,
-                'preferred_distance_km'  => $prefs->preferred_distance_km,
-                'search_filters'         => $prefs->search_filters,
-                'visibility_gender'      => $prefs->visibility_gender,
-                'visibility_age_min'     => $prefs->visibility_age_min,
-                'visibility_age_max'     => $prefs->visibility_age_max,
-                'chat_filter_enabled'    => $prefs->chat_filter_enabled,
-                'chat_filter_settings'   => $prefs->chat_filter_settings,
-                'is_invisible'           => $prefs->is_invisible,
-                'hide_from_search'       => $prefs->hide_from_search,
-                'hide_intimate'          => $prefs->hide_intimate,
-                'disable_photo_comments' => $prefs->disable_photo_comments,
+                'preferred_gender'          => $prefs->preferred_gender,
+                'preferred_age_min'         => $prefs->preferred_age_min,
+                'preferred_age_max'         => $prefs->preferred_age_max,
+                'preferred_distance_km'     => $prefs->preferred_distance_km,
+                'search_filters'            => $prefs->search_filters,
+                'visibility_gender'         => $prefs->visibility_gender,
+                'visibility_age_min'        => $prefs->visibility_age_min,
+                'visibility_age_max'        => $prefs->visibility_age_max,
+                'chat_filter_enabled'       => $prefs->chat_filter_enabled,
+                'chat_filter_settings'      => $prefs->chat_filter_settings,
+                'is_invisible'              => $prefs->is_invisible,
+                'hide_from_search'          => $prefs->hide_from_search,
+                'hide_intimate'             => $prefs->hide_intimate,
+                'disable_photo_comments'    => $prefs->disable_photo_comments,
+
+                // Интерфейс
+                'locale'                    => $prefs->locale,
+                'theme'                     => $prefs->theme,
+                'chat_widget_enabled'       => $prefs->chat_widget_enabled,
+                'chat_sound_enabled'        => $prefs->chat_sound_enabled,
+                'show_quick_replies'        => $prefs->show_quick_replies,
+
+                // Уведомления
+                'push_enabled'              => $prefs->push_enabled,
+                'email_enabled'             => $prefs->email_enabled,
+                'push_auto_recommendations' => $prefs->push_auto_recommendations,
+                'email_auto_recommendations'=> $prefs->email_auto_recommendations,
+                'allow_auto_messages'       => $prefs->allow_auto_messages,
+                'email_settings'            => $prefs->email_settings,
             ] : null,
         ];
     }
-}
+} 

@@ -225,7 +225,7 @@ class UserFinanceListingsController extends UserTabListingController
             ->latest('created_at')
             ->latest('id');
 
-        $gifts = $query->paginate(15, ['*'], 'page', $request->page());
+        $gifts = $query->paginate(5, ['*'], 'page', $request->page());
 
         // Счётчики по направлениям — для бейджей на кнопках фильтра.
         $counts = [

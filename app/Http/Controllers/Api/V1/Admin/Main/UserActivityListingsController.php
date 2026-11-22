@@ -161,7 +161,7 @@ class UserActivityListingsController extends UserTabListingController
             ])
             ->latest('last_read_at')
             ->latest('id')
-            ->paginate($request->perPage(10), ['*'], 'page', $request->page());
+            ->paginate($request->perPage(5), ['*'], 'page', $request->page());
 
         return response()->json(
             $this->paginatorToArray($participants, fn(ChatParticipant $p) => $this->formatChatParticipantRow($p, $userId))
