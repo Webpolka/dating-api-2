@@ -5,6 +5,7 @@ namespace App\Services\V1;
 use App\Models\AdminLog;
 use App\Models\User;
 use App\Models\UserAuthLog;
+use App\Support\V1\UserAgentParser;
 use Illuminate\Http\Request;
 
 /**
@@ -38,7 +39,8 @@ class AdminAuthService
      */
     public function logSuccess(int $userId, string $ip, string $userAgent): void
     {
-        UserAuthLog::log($userId, $ip, $userAgent, null, null, true);
+        $ua = UserAgentParser::parse($userAgent);
+        UserAuthLog::log($userId, $ip, $userAgent, $ua['os'], $ua['device_type'], true);
     }
 
     /**
@@ -60,9 +62,13 @@ class AdminAuthService
         $ip = $request->ip();
         $userAgent = $request->userAgent() ?? '';
         $userId = $user?->id;
-
-        // 1. Низкоуровневый аудит — всегда
-        UserAuthLog::log($userId, $ip, $userAgent, null, null, false);
+      
+        // 1. Низкоуровневый аудит — всегда.
+        // Парсим UA для device_os/device_type — раньше передавали null,null,
+        // и колонки всегда были пустыми в проде (DeviceIcon на фронте всегда
+        // показывал Monitor, device_os всегда "—").
+        $ua = UserAgentParser::parse($userAgent);
+        UserAuthLog::log($userId, $ip, $userAgent, $ua['os'], $ua['device_type'], false);
 
         // 2. Высокоуровневый аудит — всегда (виден в audit UI)
         //    model=$user (если найден) — в UI покажет ссылку на профиль юзера.

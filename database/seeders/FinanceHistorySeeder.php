@@ -248,12 +248,17 @@ class FinanceHistorySeeder extends Seeder
             'vip_expires_at' => DB::raw("CASE id {$vipSql} END::timestamp"),
         ]);
         
-        foreach ($usersData as $data) {
-            User::where('id', $data['id'])->update([
-                'premium_expires_at' => $data['premium_expires_at'],
-                'vip_expires_at' => $data['vip_expires_at'],
-            ]);
-        }
+        // foreach ($usersData as $data) {
+        //     User::where('id', $data['id'])->update([
+        //         'premium_expires_at' => $data['premium_expires_at'],
+        //         'vip_expires_at' => $data['vip_expires_at'],
+        //     ]);
+        // }
+
+        // Убран дублирующий цикл foreach ($usersData as $data) { User::where(...) }
+        // — массовый UPDATE через SQL CASE выше уже делает то же самое (1 запрос
+        // вместо N). Цикл делал N дополнительных запросов — перезаписывал те же
+        // значения, что уже были установлены SQL CASE.
 
         $bar->finish();
         $this->command->newLine(2);

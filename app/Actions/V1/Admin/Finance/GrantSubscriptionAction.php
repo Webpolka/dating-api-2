@@ -2,9 +2,11 @@
 
 namespace App\Actions\V1\Admin\Finance;
 
+use App\Enums\V1\UserEventType;
 use App\Models\SubscriptionPlan;
 use App\Models\Transaction;
 use App\Models\User;
+use App\Models\UserEvent;
 use App\Models\UserSubscription;
 
 /**
@@ -82,14 +84,15 @@ class GrantSubscriptionAction
             // users.*_expires_at обновит UserSubscriptionObserver (saved) —
             // он же отправит уведомление при полном истечении. Явной записи
             // в users здесь НЕТ (раньше именно она перетирала max(ends_at)).
+            $this->logPurchaseEvent($user, $plan, $transaction, isRenewal: true);
             return $currentSub;
         }
 
         // ===== НОВАЯ ПОДПИСКА =====
         $startsAt = now();
         $endsAt = $startsAt->copy()->addDays($plan->duration_days);
-
-        return UserSubscription::create([
+        
+        $subscription = UserSubscription::create([
             'user_id'        => $user->id,
             'plan_id'        => $plan->id,
             'transaction_id' => $transaction->id,
@@ -99,5 +102,32 @@ class GrantSubscriptionAction
             'is_auto_renew'  => (bool) ($transaction->meta['auto_renew'] ?? false),
             'status'         => UserSubscription::STATUS_ACTIVE,
         ]);
+
+        $this->logPurchaseEvent($user, $plan, $transaction, isRenewal: false);
+        return $subscription;
     }
-}
+
+    /**
+     * Логирование покупки/продления подписки в user_events.
+     *
+     * Событие: vip_purchased / premium_purchased (тип берётся из tier плана).
+     * properties: days, price, transaction_id, is_renewal — для аккордеона
+     * «Показать детали» в events-табе админки.
+     *
+     * Вызывается внутри DB::transaction() — insert попадёт в ту же транзакцию
+     * и откатится вместе с ней при сбое (атомарность).
+     */
+    private function logPurchaseEvent(User $user, SubscriptionPlan $plan, Transaction $transaction, bool $isRenewal): void
+    {
+        $eventType = $plan->tier === SubscriptionPlan::TIER_VIP
+            ? UserEventType::VipPurchased
+            : UserEventType::PremiumPurchased;
+
+        UserEvent::log($user, $eventType->value, [
+            'days'            => (int) $plan->duration_days,
+            'price'           => (float) $transaction->amount,
+            'transaction_id'  => $transaction->id,
+            'is_renewal'      => $isRenewal,
+        ]);
+    }
+} 

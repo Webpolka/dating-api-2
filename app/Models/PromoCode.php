@@ -198,8 +198,16 @@ class PromoCode extends Model
                 $this->used_count++; // синхронизируем in-memory
 
                 $appliedDiscount = 0;
-                if ($transaction) {
-                    $appliedDiscount = $this->calculateDiscount((float) $transaction->amount);
+                if ($transaction) {                  
+                    // ВАЖНО: берём скидку из transaction.meta['promo_code_discount']
+                    // (правильно вычислена в SubscriptionController от plan.price),
+                    // а НЕ вычисляем заново от transaction.amount (который уже
+                    // ПОСЛЕ скидки — calculateDiscount(finalAmount) даст неверный
+                    // результат для percent: finalAmount * % ≠ originalAmount * %).
+                    $metaDiscount = $transaction->meta['promo_code_discount'] ?? null;
+                    $appliedDiscount = $metaDiscount !== null
+                        ? (float) $metaDiscount
+                        : $this->calculateDiscount((float) $transaction->amount);
                 }
 
                 return PromoCodeUsage::create([

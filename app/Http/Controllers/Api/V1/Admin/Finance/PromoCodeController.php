@@ -58,7 +58,7 @@ class PromoCodeController extends AdminController
             })
             ->when($typeFilter !== 'all', fn($q) => $q->where('discount_type', $typeFilter))
             ->when($scopeFilter === 'general', fn($q) => $q->whereNull('user_id'))
-            ->when($scopeFilter === 'personal', fn($q) => $q->whereNotNull('user_id'))         
+            ->when($scopeFilter === 'personal', fn($q) => $q->whereNotNull('user_id'))
             ->when($statusFilter === 'active', function ($q) {
                 // "Активные" = РЕАЛЬНО валидные для использования:
                 //   is_active=true AND (expires_at IS NULL OR expires_at >= now)
@@ -82,7 +82,9 @@ class PromoCodeController extends AdminController
                 $q->whereNotNull('max_uses')->whereColumn('used_count', '>=', 'max_uses');
             })
             ->when($isId, fn($q) => $q->orderByRaw('CASE WHEN id = ? THEN 0 ELSE 1 END', [(int) $search]))
-            ->latest('created_at')
+            // Сортировка по updated_at — после создания/редактирования/toggle/apply
+            // промокод оказывается сверху (как users по updated_at).
+            ->latest('updated_at')
             ->latest('id')
             ->paginate($perPage, ['*'], 'page', $page);
 
@@ -115,8 +117,8 @@ class PromoCodeController extends AdminController
             ->with([
                 'user' => fn($q) => $q->withTrashed()
                     ->select(['id', 'name', 'email', 'role', 'status', 'premium_expires_at', 'vip_expires_at', 'is_verified', 'last_seen', 'deleted_at'])
-                    ->withAvatar(),
-                'transaction:id,amount,status,type,created_at',
+                    ->withAvatar(),                
+                'transaction:id,amount,status,type,created_at,meta',
             ])
             ->latest('created_at')
             ->latest('id')

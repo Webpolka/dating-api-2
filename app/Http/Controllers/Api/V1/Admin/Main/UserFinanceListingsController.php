@@ -225,7 +225,7 @@ class UserFinanceListingsController extends UserTabListingController
             ->latest('created_at')
             ->latest('id');
 
-        $gifts = $query->paginate(5, ['*'], 'page', $request->page());
+        $gifts = $query->paginate(15, ['*'], 'page', $request->page());
 
         // Счётчики по направлениям — для бейджей на кнопках фильтра.
         $counts = [
@@ -340,7 +340,7 @@ class UserFinanceListingsController extends UserTabListingController
             ->where('user_id', $userId)
             ->with([
                 'promoCode:id,code,discount_type,discount_value,duration_days,max_uses,used_count,expires_at,is_active',
-                'transaction:id,amount,status,type,created_at',
+                'transaction:id,amount,status,type,created_at,meta',
             ])
             ->latest('created_at')
             ->latest('id')
@@ -365,6 +365,9 @@ class UserFinanceListingsController extends UserTabListingController
                 'status'     => $u->transaction->status,
                 'type'       => $u->transaction->type,
                 'created_at' => $u->transaction->created_at?->toIso8601String(),
+                // original_amount — цена плана до скидки (из meta).
+                // Фронт использует это для колонки "Исходная" — НЕ вычисляет amount + discount.
+                'original_amount' => $u->transaction->meta['original_amount'] ?? null,
             ] : null,
         ]));
     }

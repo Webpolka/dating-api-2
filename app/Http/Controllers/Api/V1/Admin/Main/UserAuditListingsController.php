@@ -60,7 +60,7 @@ class UserAuditListingsController extends UserTabListingController
             ->with(['admin:id,name'])
             ->latest('created_at')
             ->latest('id')
-            ->paginate(15, ['*'], 'page', $request->page());
+            ->paginate(5, ['*'], 'page', $request->page());
 
         // Счётчики по каналам — для бейджей на кнопках фильтра.
         $counts = [
@@ -169,7 +169,7 @@ class UserAuditListingsController extends UserTabListingController
         })
             ->with('admin:id,name,email')
             ->latest()
-            ->paginate($request->perPage(20), ['*'], 'page', $request->page());
+            ->paginate($request->perPage(5), ['*'], 'page', $request->page());
 
         return response()->json($this->paginatorToArray($logs, fn(AdminLog $log) => [
             'id'         => $log->id,
@@ -214,7 +214,7 @@ class UserAuditListingsController extends UserTabListingController
             ->when($outcome === 'failed', fn($q) => $q->where('is_successful', false))
             ->latest('created_at')
             ->latest('id')
-            ->paginate($request->perPage(20), ['*'], 'page', $request->page());
+            ->paginate($request->perPage(5), ['*'], 'page', $request->page());
 
         $counts = UserAuthLog::where('user_id', $userId)
             ->selectRaw("

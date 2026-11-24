@@ -100,6 +100,15 @@ class TransactionResource extends JsonResource
             'provider'                => $this->provider,
             'provider_transaction_id' => $this->provider_transaction_id,
             'credits_amount'          => $this->credits_amount,
+            // Промокод — извлекаем из meta (не отдаём весь meta в списке).
+            // meta.promo_code_id и meta.promo_code_discount сохраняются
+            // в SubscriptionController::pay() при оплате с промокодом.
+            'promo_code_id'           => $this->meta['promo_code_id'] ?? null,
+            'promo_code_discount'     => $this->meta['promo_code_discount'] ?? null,
+            // original_amount — цена плана до скидки (plan.price на момент покупки).
+            // Сохраняется в meta при создании транзакции (SubscriptionController).
+            // Фронт использует это для колонки "Исходная" — НЕ вычисляет amount + discount.
+            'original_amount'         => $this->meta['original_amount'] ?? null,
             'created_at'              => $this->created_at?->toIso8601String(),
             'updated_at'              => $this->updated_at?->toIso8601String(),
             // user — без withRole (как в старом коде). AdminUserBadgeResource::nullable
@@ -118,4 +127,4 @@ class TransactionResource extends JsonResource
 
         return $data;
     }
-}
+} 

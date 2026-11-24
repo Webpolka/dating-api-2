@@ -280,11 +280,15 @@ class SubscriptionController extends Controller
             if ($promoResolution['promo_code_id'] > 0) {
                 $meta['promo_code_id'] = $promoResolution['promo_code_id'];
                 $meta['promo_code_discount'] = $promoResolution['promo_code_discount'];
+                // Сохраняем original_amount (plan.price до скидки) — для UI
+                // (колонка "Исходная" в таблице транзакций и per-user табе промокодов).
+                // Фронт НЕ должен вычислять original = amount + discount —
+                // это даёт неверный результат для percent (amount уже после скидки).
+                $meta['original_amount'] = (float) $plan->price;
             }
 
             $transaction = Transaction::create([
                 'user_id' => $user->id,
-                'amount' => $plan->price,
                 // Итоговая сумма после скидки (если промокода нет — это plan->price).
                 'amount' => $promoResolution['final_amount'],
                 'currency' => $plan->currency,

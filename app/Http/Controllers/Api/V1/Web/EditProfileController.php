@@ -14,6 +14,8 @@ use App\Http\Requests\Api\V1\Web\UpdateProfileSelfPortraitRequest;
 use App\Http\Requests\Api\V1\Web\UpdateProfilePersonalInfoRequest;
 use App\Http\Requests\Api\V1\Web\UpdateProfileLookingForRequest;
 use App\Http\Requests\Api\V1\Web\UpdateProfilePreferencesRequest;
+use App\Enums\V1\UserEventType;
+use App\Models\UserEvent;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Log;
 
@@ -139,10 +141,9 @@ public function updateMain(UpdateProfileMainRequest $request)
      *
      * Endpoint: PATCH /api/profile/headline
      * Body: { headline: string|null }
-     *
-     * TODO (будущее): backend должен СОЗДАТЬ запись в user_events:
-     *   { type: 'headline_updated', user_id, meta: { old: '...', new: '...' } }
-     *   — для ленты событий пользователя.
+     *  
+     * Логируем в user_events (type='status_changed') — для ленты событий
+     * в админке. properties содержит old/new headline для аудита.
      */
     public function updateHeadline(UpdateProfileHeadlineRequest $request)
     {
@@ -157,12 +158,21 @@ public function updateMain(UpdateProfileMainRequest $request)
                 'message' => 'Профиль не найден.',
             ], 404);
         }
-
-        // TODO: создать запись в user_events (type='headline_updated')
-        // $oldHeadline = $profile->headline;
-        // UserEvent::create([...]);
+      
+        // Снапшот старого headline для аудита в user_events.
+        $oldHeadline = $profile->headline;
 
         $profile->update($validated);
+
+        // Логируем изменение статуса в ленту событий.
+        // Только если headline реально изменился — иначе листинга засоряется
+        // дубликатами (юзер нажал Save без изменений).
+        if ($oldHeadline !== ($validated['headline'] ?? null)) {
+            UserEvent::log($user, UserEventType::StatusChanged->value, [
+                'old' => $oldHeadline,
+                'new' => $validated['headline'] ?? null,
+            ]);
+        }
 
         return response()->json([
             'success' => true,

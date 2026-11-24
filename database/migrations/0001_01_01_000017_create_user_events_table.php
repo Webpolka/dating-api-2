@@ -13,8 +13,11 @@ return new class extends Migration
             
             // Если юзер удаляется, его лента событий тоже схлопывается (cascadeOnDelete)
             $table->foreignId('user_id')->constrained('users')->cascadeOnDelete();
-            
-            // Тип события (avatar_changed, birthday, status_updated, photos_uploaded)
+                    
+            // Тип события — значения из App\Enums\V1\UserEventType:
+            // photo_updated, status_changed, vip_purchased, premium_purchased,
+            // diary_created, profile_completed, birthday.
+            // Для типов вне enum — fallback в UserActivityListingsController::eventMeta().
             $table->string('type', 50)->index();
             
             // Доп. данные (например, ID нового фото или текст нового статуса)

@@ -12,7 +12,9 @@ use App\Http\Requests\Api\V1\Web\ResetPasswordRequest;
 use App\Http\Requests\Api\V1\Web\ValidateRegisterStep1Request;
 use App\Http\Requests\Api\V1\Web\ValidateRegisterStep2Request;
 use App\Models\User;
+use App\Models\UserAuthLog;
 use App\Services\V1\CaptchaService;
+use App\Support\V1\UserAgentParser;
 use Carbon\Carbon;
 use Illuminate\Auth\Events\PasswordReset;
 use Illuminate\Auth\Events\Registered;
@@ -84,7 +86,31 @@ class AuthController extends Controller
             ], 422);
         }
 
+        $ip = $request->ip();
+        $userAgent = $request->userAgent() ?? '';
+        $ua = UserAgentParser::parse($userAgent);
+
         if (!Auth::attempt(['email' => $validated['email'], 'password' => $validated['password']], $request->boolean('remember'))) {
+            // Логируем неудачную попытку входа.
+            // Раньше web-логин ВООБЩЕ не логировался в user_auth_logs —
+            // только админ-логин через AdminAuthService. Таб «История входов»
+            // был пустым для всех обычных юзеров (только сид-данные).
+            //
+            // Ищем юзера по email ТОЛЬКО здесь (в ветке неудачи) — на успешный
+            // логин лишний запрос не нужен, Auth::user() отдаст модель из сессии.
+            // Если email не существует — $user = null, логируем с null user_id
+            // (антифрод-контекст: сканирование ящиков).
+            $failedUser = User::where('email', $validated['email'])->first();
+
+            UserAuthLog::log(
+                $failedUser?->id,
+                $ip,
+                $userAgent,
+                $ua['os'],
+                $ua['device_type'],
+                false,
+            );
+
             return response()->json([
                 'errors' => ['email' => ['Неверный email или пароль.']]
             ], 422);
@@ -96,11 +122,32 @@ class AuthController extends Controller
         $user = Auth::user();
 
         if ($user->isBanned()) {
+            // Юзер аутентифицировался (credentials верные), но заблокирован.
+            // Логируем как неудачную попытку — доступ не получен.
+            UserAuthLog::log(
+                $user->id,
+                $ip,
+                $userAgent,
+                $ua['os'],
+                $ua['device_type'],
+                false,
+            );
+
             Auth::logout();
             return response()->json([
                 'errors' => ['email' => ['Ваш аккаунт заблокирован.']]
             ], 422);
         }
+
+        // Логируем успешный вход.
+        UserAuthLog::log(
+            $user->id,
+            $ip,
+            $userAgent,
+            $ua['os'],
+            $ua['device_type'],
+            true,
+        );
 
         $user->update([
             'last_login_at' => now(),

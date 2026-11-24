@@ -18,6 +18,8 @@ class UserEventsSeeder extends Seeder
         $users = User::where('role', 'user')->get();
  
         // Шаблоны событий: теперь строго используем Enum!
+        // Birthday раньше отсутствовал — cake-иконка никогда не показывалась
+        // в сид-данных. Теперь все 7 типов enum покрыты.
         $templates = [
             [
                 'type' => UserEventType::PhotoUpdated,
@@ -42,6 +44,10 @@ class UserEventsSeeder extends Seeder
             [
                 'type' => UserEventType::PremiumPurchased,
                 'properties' => ['days' => 7]
+            ],
+            [
+                'type' => UserEventType::Birthday,
+                'properties' => ['age' => rand(18, 45)]
             ],
         ];
 
